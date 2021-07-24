@@ -1,2 +1,3 @@
 # dbop
-minimalistic db operation helper, for those against ORM
+
+Minimalistic db operation helper, for those against ORM.
