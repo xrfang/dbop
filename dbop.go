@@ -2,6 +2,9 @@ package dbop
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
 )
 
 func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
@@ -79,5 +82,103 @@ func FetchRow(rows *sql.Rows, proc func(map[string]interface{}) bool) (err error
 		}
 	}
 	assert(rows.Err())
+	return
+}
+
+func InsertRows(conn interface{}, table string, rows []map[string]interface{}) (cnt int, err error) {
+	if len(rows) == 0 {
+		return
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			err = trace("%v", e)
+		}
+	}()
+	var tx *sql.Tx
+	switch c := conn.(type) {
+	case *sql.DB:
+		tx, err = c.Begin()
+		assert(err)
+		defer func() {
+			if e := recover(); e != nil {
+				tx.Rollback()
+				panic(e)
+			}
+			assert(tx.Commit())
+		}()
+	case *sql.Tx:
+		tx = c
+	default:
+		panic(errors.New("InsertRows: conn must be *sql.DB or *sql.Tx"))
+	}
+	var keys []string
+	for k := range rows[0] {
+		keys = append(keys, k)
+	}
+	stmt := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES (?"+
+		strings.Repeat(`,?`, len(keys)-1)+")", table,
+		strings.Join(keys, "`,`"))
+	st, err := tx.Prepare(stmt)
+	assert(err)
+	for _, r := range rows {
+		var args []interface{}
+		for _, k := range keys {
+			args = append(args, r[k])
+		}
+		res, err := st.Exec(args...)
+		assert(err)
+		ra, err := res.RowsAffected()
+		assert(err)
+		cnt += int(ra)
+	}
+	return
+}
+
+func DeleteRows(conn interface{}, table string, rows []map[string]interface{}, keys []string) (cnt int, err error) {
+	if len(rows) == 0 || len(keys) == 0 {
+		return
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			err = trace("%v", e)
+		}
+	}()
+	var tx *sql.Tx
+	switch c := conn.(type) {
+	case *sql.DB:
+		tx, err = c.Begin()
+		assert(err)
+		defer func() {
+			if e := recover(); e != nil {
+				tx.Rollback()
+				panic(e)
+			}
+			assert(tx.Commit())
+		}()
+	case *sql.Tx:
+		tx = c
+	default:
+		panic(errors.New("DeleteRows: conn must be *sql.DB or *sql.Tx"))
+	}
+	stmt := fmt.Sprintf("DELETE FROM `%s` WHERE ", table)
+	for _, r := range rows {
+		var args []interface{}
+		var where []string
+		for _, k := range keys {
+			v := r[k]
+			if v == nil {
+				where = append(where, fmt.Sprintf("(`%s` IS NULL)", k))
+			} else {
+				where = append(where, fmt.Sprintf("(`%s`=?)", k))
+				args = append(args, v)
+			}
+		}
+		cmd := stmt + strings.Join(where, " AND ")
+		res, err := tx.Exec(cmd, args...)
+		assert(err)
+		ra, err := res.RowsAffected()
+		assert(err)
+		cnt += int(ra)
+	}
 	return
 }
