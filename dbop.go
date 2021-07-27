@@ -7,6 +7,26 @@ import (
 	"strings"
 )
 
+func stringify(r map[string]interface{}) map[string]string {
+	s := make(map[string]string)
+	for k, v := range r {
+		if v == nil {
+			s[k] = ""
+		} else {
+			s[k] = v.(string)
+		}
+	}
+	return s
+}
+
+func Stringify(rs []map[string]interface{}) []map[string]string {
+	var ss []map[string]string
+	for _, r := range rs {
+		ss = append(ss, stringify(r))
+	}
+	return ss
+}
+
 func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
