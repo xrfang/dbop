@@ -4,10 +4,66 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 )
 
-func stringify(r map[string]interface{}) map[string]string {
+type (
+	Record  map[string]interface{}
+	Records []Record
+)
+
+func (r Record) Str(field string) string {
+	switch r[field] {
+	case nil:
+		return ""
+	default:
+		return r[field].(string)
+	}
+}
+
+func (r Record) NStr(field string) sql.NullString {
+	switch r[field] {
+	case nil:
+		return sql.NullString{Valid: false}
+	default:
+		return sql.NullString{String: r[field].(string), Valid: true}
+	}
+}
+
+func (r Record) Float64(field string) float64 {
+	switch r[field] {
+	case nil:
+		return 0
+	default:
+		v, _ := strconv.ParseFloat(r.Str(field), 64)
+		return v
+	}
+}
+
+func (r Record) Int(field string) int64 {
+	v, _ := strconv.Atoi(r.Str(field))
+	return int64(v)
+}
+
+func (r Record) Time(field string) time.Time {
+	t, err := time.Parse(time.RFC3339, r.Str(field))
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+func (r Record) NTime(field string) sql.NullTime {
+	t, err := time.Parse(time.RFC3339, r.Str(field))
+	if err != nil {
+		return sql.NullTime{Valid: false}
+	}
+	return sql.NullTime{Time: t, Valid: true}
+}
+
+func stringify(r Record) map[string]string {
 	s := make(map[string]string)
 	for k, v := range r {
 		if v == nil {
@@ -19,7 +75,7 @@ func stringify(r map[string]interface{}) map[string]string {
 	return s
 }
 
-func Stringify(rs []map[string]interface{}) []map[string]string {
+func Stringify(rs Records) []map[string]string {
 	var ss []map[string]string
 	for _, r := range rs {
 		ss = append(ss, stringify(r))
@@ -43,7 +99,7 @@ func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
 	return
 }
 
-func FetchRows(rows *sql.Rows) (recs []map[string]interface{}, err error) {
+func FetchRows(rows *sql.Rows) (recs Records, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			rows.Close()
@@ -73,7 +129,7 @@ func FetchRows(rows *sql.Rows) (recs []map[string]interface{}, err error) {
 	return
 }
 
-func FetchRow(rows *sql.Rows, proc func(map[string]interface{}) bool) (err error) {
+func FetchRow(rows *sql.Rows, proc func(Record) bool) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			rows.Close()
@@ -105,7 +161,7 @@ func FetchRow(rows *sql.Rows, proc func(map[string]interface{}) bool) (err error
 	return
 }
 
-func InsertRows(conn interface{}, table string, rows []map[string]interface{}) (cnt int, err error) {
+func InsertRows(conn interface{}, table string, rows Records) (cnt int, err error) {
 	if len(rows) == 0 {
 		return
 	}
@@ -154,7 +210,7 @@ func InsertRows(conn interface{}, table string, rows []map[string]interface{}) (
 	return
 }
 
-func DeleteRows(conn interface{}, table string, rows []map[string]interface{}, keys []string) (cnt int, err error) {
+func DeleteRows(conn interface{}, table string, rows Records, keys []string) (cnt int, err error) {
 	if len(rows) == 0 || len(keys) == 0 {
 		return
 	}
