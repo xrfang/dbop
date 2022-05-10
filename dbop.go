@@ -258,3 +258,65 @@ func DeleteRows(conn interface{}, table string, rows Records, keys []string) (cn
 	}
 	return
 }
+
+func UpdateRows(conn interface{}, table string, rows Records, keys []string) (cnt int, err error) {
+	if len(rows) == 0 || len(keys) == 0 {
+		return
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			err = trace("%v", e)
+		}
+	}()
+	var tx *sql.Tx
+	switch c := conn.(type) {
+	case *sql.DB:
+		tx, err = c.Begin()
+		assert(err)
+		defer func() {
+			if e := recover(); e != nil {
+				tx.Rollback()
+				panic(e)
+			}
+			assert(tx.Commit())
+		}()
+	case *sql.Tx:
+		tx = c
+	default:
+		panic(errors.New("UpdateRows: conn must be *sql.DB or *sql.Tx"))
+	}
+	stmt := fmt.Sprintf("UPDATE `%s` SET ", table)
+	for _, r := range rows {
+		var args, cond []interface{}
+		var sets, where []string
+		for _, k := range keys {
+			v := r[k]
+			if v == nil {
+				where = append(where, fmt.Sprintf("(`%s` IS NULL)", k))
+			} else {
+				where = append(where, fmt.Sprintf("(`%s`=?)", k))
+				cond = append(cond, v)
+			}
+			delete(r, k)
+		}
+		if len(r) == 0 {
+			continue
+		}
+		for k, v := range r {
+			if v == nil {
+				sets = append(sets, fmt.Sprintf("`%s`=NULL", k))
+			} else {
+				sets = append(sets, fmt.Sprintf("`%s`=?", k))
+				args = append(args, v)
+			}
+		}
+		cmd := stmt + strings.Join(sets, ",") + " WHERE " + strings.Join(where, " AND ")
+		args = append(args, cond...)
+		res, err := tx.Exec(cmd, args...)
+		assert(err)
+		ra, err := res.RowsAffected()
+		assert(err)
+		cnt += int(ra)
+	}
+	return
+}
