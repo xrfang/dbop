@@ -7,7 +7,23 @@ import (
 	"strings"
 )
 
+type (
+	TracedError interface {
+		Err() error
+		Error() string
+		Stack() []string
+		Describe(string, ...interface{})
+		Trace()
+	}
+	exception struct {
+		err   error
+		msg   string
+		trace []string
+	}
+)
+
 func assert(e interface{}, ntfy ...interface{}) {
+	var err TracedError
 	switch e.(type) {
 	case nil:
 	case bool:
@@ -19,23 +35,86 @@ func assert(e interface{}, ntfy ...interface{}) {
 					mesg = fmt.Sprintf(mesg, ntfy[1:]...)
 				}
 			}
-			panic(errors.New(mesg))
+			err = &exception{err: errors.New(mesg)}
 		}
+	case TracedError:
+		err = e.(TracedError)
 	case error:
-		panic(e)
+		err = &exception{err: e.(error)}
 	default:
-		panic(fmt.Errorf("assert: expect error or bool, got %T", e))
+		err = &exception{err: fmt.Errorf("assert: expect error or bool, got %T", e)}
+	}
+	if err != nil {
+		err.Trace()
+		panic(err)
 	}
 }
 
-type exception []string
-
-func (e exception) Error() string {
-	return strings.Join(e, "\n")
+func (ex *exception) Trace() {
+	if len(ex.trace) > 0 {
+		return
+	}
+	n := 1
+	for {
+		n++
+		pc, file, line, ok := runtime.Caller(n)
+		if !ok {
+			break
+		}
+		f := runtime.FuncForPC(pc)
+		name := f.Name()
+		if strings.HasPrefix(name, "runtime.") {
+			continue
+		}
+		fn := strings.Split(file, "/")
+		if len(fn) > 1 {
+			file = strings.Join(fn[len(fn)-2:], "/")
+		}
+		ex.trace = append(ex.trace, fmt.Sprintf("(%s:%d) %s", file, line, name))
+	}
 }
 
-func trace(msg string, args ...interface{}) error {
-	ex := exception{fmt.Sprintf(msg, args...)}
+func (ex *exception) Describe(msg string, args ...interface{}) {
+	ex.msg = fmt.Sprintf(msg, args...)
+}
+
+func (ex exception) Err() error {
+	return ex.err
+}
+
+func (ex exception) Error() string {
+	msg := ex.msg
+	if msg == "" {
+		msg = ex.Err().Error()
+	}
+	stack := []string{msg}
+	for _, t := range ex.trace {
+		stack = append(stack, "\t"+t)
+	}
+	return strings.Join(stack, "\n")
+}
+
+func (ex exception) Stack() []string {
+	return ex.trace
+}
+
+func trace(args ...interface{}) *exception {
+	if len(args) == 0 {
+		return nil
+	}
+	var ex exception
+	switch args[0].(type) {
+	case string:
+		ex.err = fmt.Errorf(args[0].(string), args[1:]...)
+	case error:
+		if len(args) > 1 {
+			ex.err = errors.New("trace: extra argument for error")
+		} else {
+			ex.err = args[0].(error)
+		}
+	default:
+		ex.err = fmt.Errorf("trace: invalid type for arg[0] (%T)", args[0])
+	}
 	n := 1
 	for {
 		n++
@@ -50,7 +129,7 @@ func trace(msg string, args ...interface{}) error {
 		}
 		fn := strings.Split(file, "/")
 		file = strings.Join(fn[len(fn)-2:], "/")
-		ex = append(ex, fmt.Sprintf("\t(%s:%d) %s", file, line, name))
+		ex.trace = append(ex.trace, fmt.Sprintf("(%s:%d) %s", file, line, name))
 	}
-	return ex
+	return &ex
 }
