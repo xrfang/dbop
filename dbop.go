@@ -161,7 +161,7 @@ func FetchRow(rows *sql.Rows, proc func(Record) bool) (err error) {
 	return
 }
 
-func InsertRows(conn interface{}, table string, rows Records) (cnt int, err error) {
+func insRows(conn interface{}, oper, table string, rows Records) (cnt int, err error) {
 	if len(rows) == 0 {
 		return
 	}
@@ -185,14 +185,14 @@ func InsertRows(conn interface{}, table string, rows Records) (cnt int, err erro
 	case *sql.Tx:
 		tx = c
 	default:
-		panic(errors.New("InsertRows: conn must be *sql.DB or *sql.Tx"))
+		panic(errors.New("dbop: conn must be *sql.DB or *sql.Tx"))
 	}
 	var keys []string
 	for k := range rows[0] {
 		keys = append(keys, k)
 	}
-	stmt := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES (?"+
-		strings.Repeat(`,?`, len(keys)-1)+")", table,
+	stmt := fmt.Sprintf("%s INTO `%s` (`%s`) VALUES (?"+
+		strings.Repeat(`,?`, len(keys)-1)+")", oper, table,
 		strings.Join(keys, "`,`"))
 	st, err := tx.Prepare(stmt)
 	assert(err)
@@ -208,6 +208,14 @@ func InsertRows(conn interface{}, table string, rows Records) (cnt int, err erro
 		cnt += int(ra)
 	}
 	return
+}
+
+func InsertRows(conn interface{}, table string, rows Records) (cnt int, err error) {
+	return insRows(conn, "INSERT", table, rows)
+}
+
+func ReplaceRows(conn interface{}, table string, rows Records) (cnt int, err error) {
+	return insRows(conn, "REPLACE", table, rows)
 }
 
 func DeleteRows(conn interface{}, table string, rows Records, keys []string) (cnt int, err error) {
