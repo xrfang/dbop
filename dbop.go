@@ -88,7 +88,9 @@ func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
 		if e := recover(); e != nil {
 			err = e.(error)
 		}
-		rows.Close()
+		if rows != nil {
+			rows.Close()
+		}
 	}()
 	for rows.Next() {
 		if !proc() {
@@ -104,7 +106,9 @@ func FetchRows(rows *sql.Rows) (recs Records, err error) {
 		if e := recover(); e != nil {
 			err = e.(error)
 		}
-		rows.Close()
+		if rows != nil {
+			rows.Close()
+		}
 	}()
 	cols, err := rows.Columns()
 	assert(err)
@@ -134,7 +138,9 @@ func FetchRow(rows *sql.Rows, proc func(Record) bool) (err error) {
 		if e := recover(); e != nil {
 			err = e.(error)
 		}
-		rows.Close()
+		if rows != nil {
+			rows.Close()
+		}
 	}()
 	cols, err := rows.Columns()
 	assert(err)
