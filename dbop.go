@@ -86,9 +86,9 @@ func Stringify(rs Records) []map[string]string {
 func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			rows.Close()
-			err = trace("%v", e)
+			err = e.(error)
 		}
+		rows.Close()
 	}()
 	for rows.Next() {
 		if !proc() {
@@ -102,9 +102,9 @@ func RangeRows(rows *sql.Rows, proc func() bool) (err error) {
 func FetchRows(rows *sql.Rows) (recs Records, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			rows.Close()
-			err = trace("%v", e)
+			err = e.(error)
 		}
+		rows.Close()
 	}()
 	cols, err := rows.Columns()
 	assert(err)
@@ -132,9 +132,9 @@ func FetchRows(rows *sql.Rows) (recs Records, err error) {
 func FetchRow(rows *sql.Rows, proc func(Record) bool) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			rows.Close()
-			err = trace("%v", e)
+			err = e.(error)
 		}
+		rows.Close()
 	}()
 	cols, err := rows.Columns()
 	assert(err)
