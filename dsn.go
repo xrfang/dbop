@@ -26,6 +26,9 @@ func (n DSN) String(driver string) (string, error) {
 	if n.User == "" && n.Host != "127.0.0.1" && n.Host != "localhost" && n.Host != "::1" {
 		return "", errors.New("invalid DSN: missing 'user'")
 	}
+	if n.Args == nil {
+		n.Args = make(map[string]string)
+	}
 	switch driver {
 	case "mysql":
 		if _, ok := n.Args["loc"]; !ok {
