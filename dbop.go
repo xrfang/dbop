@@ -173,7 +173,7 @@ func insRows(conn interface{}, oper, table string, rows Records) (cnt int, err e
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			err = trace("%v", e)
+			err = e.(error)
 		}
 	}()
 	var tx *sql.Tx
@@ -230,7 +230,7 @@ func DeleteRows(conn interface{}, table string, rows Records, keys []string) (cn
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			err = trace("%v", e)
+			err = e.(error)
 		}
 	}()
 	var tx *sql.Tx
@@ -279,7 +279,7 @@ func UpdateRows(conn interface{}, table string, rows Records, keys []string) (cn
 	}
 	defer func() {
 		if e := recover(); e != nil {
-			err = trace("%v", e)
+			err = e.(error)
 		}
 	}()
 	var tx *sql.Tx
@@ -332,5 +332,47 @@ func UpdateRows(conn interface{}, table string, rows Records, keys []string) (cn
 		assert(err)
 		cnt += int(ra)
 	}
+	return
+}
+
+func InsertRow(conn interface{}, table string, row Record) (lastInsertID int64, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			err = e.(error)
+		}
+	}()
+	var tx *sql.Tx
+	switch c := conn.(type) {
+	case *sql.DB:
+		tx, err = c.Begin()
+		assert(err)
+		defer func() {
+			if e := recover(); e != nil {
+				tx.Rollback()
+				panic(e)
+			}
+			assert(tx.Commit())
+		}()
+	case *sql.Tx:
+		tx = c
+	default:
+		panic(errors.New("dbop: conn must be *sql.DB or *sql.Tx"))
+	}
+	var keys []string
+	for k := range row {
+		keys = append(keys, k)
+	}
+	stmt := fmt.Sprintf("INSERT INTO `%s` (`%s`) VALUES (?"+strings.Repeat(`,?`,
+		len(keys)-1)+")", table, strings.Join(keys, "`,`"))
+	st, err := tx.Prepare(stmt)
+	assert(err)
+	var args []interface{}
+	for _, k := range keys {
+		args = append(args, row[k])
+	}
+	res, err := st.Exec(args...)
+	assert(err)
+	lastInsertID, err = res.LastInsertId()
+	assert(err)
 	return
 }
