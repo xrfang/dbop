@@ -76,7 +76,7 @@ func (n DSN) String(driver string) (string, error) {
 		}
 		return strings.Join(args, " "), nil
 	default:
-		return "", fmt.Errorf("invalid DSN: unkown driver %q", driver)
+		return "", fmt.Errorf("invalid DSN: unknown driver '%s'", driver)
 	}
 }
 
